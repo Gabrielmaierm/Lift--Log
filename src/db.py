@@ -6,6 +6,7 @@ Responsabilidades:
   · Insertar sesiones y sets (con dedup por UUID)
   · Actualizar automáticamente 1RM cuando se registra un nuevo máximo
   · Proveer las queries analíticas que usa tanto app.py como coach.py
+  · Gestionar el perfil del atleta (una sola fila, siempre actualizable)
 
 No usa ORM: sqlite3 de la librería estándar, queries explícitas y comentadas.
 """
@@ -54,6 +55,25 @@ MOVEMENTS_SEED: list[tuple[str, str]] = [
     ("Jerk from Rack",      "accessory"),
 ]
 
+# Categorías de peso IWF masculino y femenino
+WEIGHT_CATEGORIES = {
+    "Masculino": ["55", "61", "67", "73", "81", "89", "96", "102", "109", "+109"],
+    "Femenino":  ["45", "49", "55", "59", "64", "71", "76", "81", "87", "+87"],
+}
+
+TRAINING_STATES = [
+    "Normal",
+    "Retorno de lesión",
+    "Lesión activa",
+]
+
+COMPETITION_LEVELS = [
+    "Principiante",
+    "Amateur federado",
+    "Regional",
+    "Nacional",
+]
+
 
 # ─────────────────────────────────────────────────────────────
 # CONEXIÓN
@@ -86,6 +106,29 @@ def initialize_db() -> None:
     conn = get_connection()
     cur  = conn.cursor()
 
+    # ── Tabla: athlete_profile ────────────────────────────────
+    # Una sola fila (id=1) que se actualiza desde el formulario del dashboard.
+    # El coach lee estos datos en cada llamada a la API.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS athlete_profile (
+            id                  INTEGER PRIMARY KEY DEFAULT 1,
+            nombre              TEXT    DEFAULT '',
+            edad                INTEGER,
+            genero              TEXT    DEFAULT 'Masculino',
+            categoria_peso      TEXT    DEFAULT '',
+            años_experiencia    INTEGER DEFAULT 0,
+            federacion          TEXT    DEFAULT '',
+            nivel_competitivo   TEXT    DEFAULT 'Amateur federado',
+            fecha_competencia   TEXT,               -- YYYY-MM-DD o NULL
+            estado_entrenamiento TEXT   DEFAULT 'Normal',
+            notas_adicionales   TEXT    DEFAULT '',
+            updated_at          TEXT    DEFAULT (datetime('now')),
+            -- Restricción: solo puede existir una fila con id=1
+            CHECK(id = 1)
+        )
+    """)
+
+    # ── Tabla: movements ──────────────────────────────────────
     cur.execute("""
         CREATE TABLE IF NOT EXISTS movements (
             id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,6 +138,7 @@ def initialize_db() -> None:
         )
     """)
 
+    # ── Tabla: sessions ───────────────────────────────────────
     cur.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,6 +150,7 @@ def initialize_db() -> None:
         )
     """)
 
+    # ── Tabla: sets ───────────────────────────────────────────
     cur.execute("""
         CREATE TABLE IF NOT EXISTS sets (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,6 +166,7 @@ def initialize_db() -> None:
         )
     """)
 
+    # ── Tabla: one_rm_history ─────────────────────────────────
     cur.execute("""
         CREATE TABLE IF NOT EXISTS one_rm_history (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -135,6 +181,7 @@ def initialize_db() -> None:
         )
     """)
 
+    # ── Tabla: coach_conversations ────────────────────────────
     cur.execute("""
         CREATE TABLE IF NOT EXISTS coach_conversations (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,15 +191,23 @@ def initialize_db() -> None:
         )
     """)
 
+    # ── Índices ───────────────────────────────────────────────
     cur.execute("CREATE INDEX IF NOT EXISTS idx_sets_movement  ON sets(movement_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_sets_session   ON sets(session_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_sessions_date  ON sessions(session_date)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_1rm_movement   ON one_rm_history(movement_id, recorded_date DESC)")
 
+    # ── Seed: movimientos ─────────────────────────────────────
     cur.executemany(
         "INSERT OR IGNORE INTO movements (name, category) VALUES (?, ?)",
         MOVEMENTS_SEED
     )
+
+    # ── Seed: perfil vacío (id=1) ─────────────────────────────
+    # INSERT OR IGNORE: si ya existe el perfil, no lo sobreescribe
+    cur.execute("""
+        INSERT OR IGNORE INTO athlete_profile (id) VALUES (1)
+    """)
 
     conn.commit()
     conn.close()
@@ -160,7 +215,91 @@ def initialize_db() -> None:
 
 
 # ─────────────────────────────────────────────────────────────
-# INSERCIÓN
+# PERFIL DEL ATLETA
+# ─────────────────────────────────────────────────────────────
+
+def get_athlete_profile() -> dict:
+    """
+    Retorna el perfil del atleta como diccionario.
+    Siempre retorna algo — si no hay perfil, retorna valores vacíos.
+    """
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM athlete_profile WHERE id = 1"
+        ).fetchone()
+
+        if row:
+            return dict(row)
+
+        # Perfil no existe aún — retornar defaults
+        return {
+            "nombre":               "",
+            "edad":                 None,
+            "genero":               "Masculino",
+            "categoria_peso":       "",
+            "años_experiencia":     0,
+            "federacion":           "",
+            "nivel_competitivo":    "Amateur federado",
+            "fecha_competencia":    None,
+            "estado_entrenamiento": "Normal",
+            "notas_adicionales":    "",
+        }
+    finally:
+        conn.close()
+
+
+def save_athlete_profile(
+    nombre:               str,
+    edad:                 Optional[int],
+    genero:               str,
+    categoria_peso:       str,
+    años_experiencia:     int,
+    federacion:           str,
+    nivel_competitivo:    str,
+    fecha_competencia:    Optional[str],
+    estado_entrenamiento: str,
+    notas_adicionales:    str,
+) -> None:
+    """
+    Guarda o actualiza el perfil del atleta (siempre es la fila id=1).
+    Usa INSERT OR REPLACE para garantizar una sola fila.
+    """
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO athlete_profile (
+                id, nombre, edad, genero, categoria_peso,
+                años_experiencia, federacion, nivel_competitivo,
+                fecha_competencia, estado_entrenamiento,
+                notas_adicionales, updated_at
+            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            """,
+            (
+                nombre, edad, genero, categoria_peso,
+                años_experiencia, federacion, nivel_competitivo,
+                fecha_competencia, estado_entrenamiento,
+                notas_adicionales,
+            )
+        )
+        conn.commit()
+        print("✅ Perfil del atleta guardado")
+    finally:
+        conn.close()
+
+
+def profile_is_complete() -> bool:
+    """
+    Verifica si el perfil tiene los campos mínimos para usar el sistema.
+    Campos requeridos: nombre y categoria_peso.
+    """
+    profile = get_athlete_profile()
+    return bool(profile.get("nombre")) and bool(profile.get("categoria_peso"))
+
+
+# ─────────────────────────────────────────────────────────────
+# INSERCIÓN DE SESIONES Y SETS
 # ─────────────────────────────────────────────────────────────
 
 def insert_session(
@@ -254,7 +393,6 @@ def insert_set(
 def _update_1rm_if_new_max(movement_id: int, weight_kg: float, reps: int) -> None:
     """
     Calcula el 1RM estimado con Brzycki y lo guarda si supera el máximo histórico.
-    Brzycki: 1RM = peso × 36 / (37 − reps). Solo para 1-5 reps.
     """
     if reps > 5:
         return
@@ -304,9 +442,7 @@ def _update_1rm_if_new_max(movement_id: int, weight_kg: float, reps: int) -> Non
 # ─────────────────────────────────────────────────────────────
 
 def get_current_1rms() -> dict:
-    """
-    Retorna el 1RM máximo histórico para cada movimiento registrado.
-    """
+    """Retorna el 1RM máximo histórico para cada movimiento registrado."""
     conn = get_connection()
     try:
         rows = conn.execute(
@@ -336,10 +472,7 @@ def get_current_1rms() -> dict:
 
 
 def get_weekly_tonnage(weeks: int = 8) -> list[dict]:
-    """
-    Tonelaje semanal por movimiento para las últimas N semanas.
-    Tonelaje = Σ(weight_kg × reps) por movimiento por semana.
-    """
+    """Tonelaje semanal por movimiento para las últimas N semanas."""
     conn = get_connection()
     try:
         rows = conn.execute(
@@ -367,13 +500,10 @@ def get_weekly_tonnage(weeks: int = 8) -> list[dict]:
 
 
 def get_snatch_cj_ratio() -> dict:
-    """
-    Calcula la relación Snatch / Clean & Jerk con los 1RM actuales.
-    """
+    """Calcula la relación Snatch / Clean & Jerk con los 1RM actuales."""
     current = get_current_1rms()
-
-    snatch = current.get("Snatch")
-    cj     = current.get("Clean & Jerk")
+    snatch  = current.get("Snatch")
+    cj      = current.get("Clean & Jerk")
 
     result: dict = {
         "snatch_1rm":    snatch["weight_kg"] if snatch else None,
@@ -403,9 +533,7 @@ def get_snatch_cj_ratio() -> dict:
 
 
 def get_volume_trend_alert(lookback_weeks: int = 4) -> dict:
-    """
-    Compara tonelaje de los últimos 7 días vs. promedio de N semanas previas.
-    """
+    """Compara tonelaje de los últimos 7 días vs. promedio de N semanas previas."""
     conn = get_connection()
     try:
         current = conn.execute(
@@ -441,7 +569,6 @@ def get_volume_trend_alert(lookback_weeks: int = 4) -> dict:
             alert_level = "no_data"
         else:
             change_pct = ((current_kg - avg_prev) / avg_prev) * 100
-
             if change_pct < -35:
                 alert_level = "critical_drop"
             elif change_pct < -20:
@@ -463,9 +590,7 @@ def get_volume_trend_alert(lookback_weeks: int = 4) -> dict:
 
 
 def get_recent_sessions(limit: int = 10) -> list[dict]:
-    """
-    Retorna las últimas N sesiones con todos sus sets incluidos.
-    """
+    """Retorna las últimas N sesiones con todos sus sets incluidos."""
     conn = get_connection()
     try:
         sessions = conn.execute(
@@ -508,6 +633,113 @@ def get_recent_sessions(limit: int = 10) -> list[dict]:
 
 
 # ─────────────────────────────────────────────────────────────
+# GESTIÓN MANUAL DE 1RM
+# ─────────────────────────────────────────────────────────────
+
+def save_manual_1rm(movement_name: str, weight_kg: float, recorded_date: str) -> None:
+    """
+    Guarda un 1RM ingresado manualmente por el atleta.
+    Útil para registrar 1RMs previos a empezar a usar la app,
+    o para registrar un máximo hecho fuera de una sesión normal.
+    Solo guarda si supera el máximo histórico actual.
+    """
+    movement_id = _get_or_create_movement_id(movement_name)
+
+    conn = get_connection()
+    try:
+        # Verificar si supera el máximo actual
+        row = conn.execute(
+            """
+            SELECT weight_kg FROM one_rm_history
+            WHERE movement_id = ?
+            ORDER BY weight_kg DESC
+            LIMIT 1
+            """,
+            (movement_id,)
+        ).fetchone()
+
+        current_max = row["weight_kg"] if row else 0.0
+
+        if weight_kg >= current_max:
+            conn.execute(
+                """
+                INSERT INTO one_rm_history
+                    (movement_id, weight_kg, recorded_date, source,
+                     source_weight_kg, source_reps)
+                VALUES (?, ?, ?, 'actual', ?, 1)
+                """,
+                (movement_id, round(weight_kg, 2), recorded_date,
+                 weight_kg)
+            )
+            conn.commit()
+            print(f"✅ 1RM manual guardado: {movement_name} → {weight_kg} kg")
+        else:
+            print(f"ℹ️  1RM {weight_kg} kg no supera el máximo actual "
+                  f"({current_max} kg) para {movement_name}")
+    finally:
+        conn.close()
+
+
+def get_1rm_history_by_movement(movement_name: str) -> list[dict]:
+    """
+    Retorna el historial completo de 1RM para un movimiento específico.
+    Usado para el gráfico de progresión de 1RM.
+    """
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT
+                r.weight_kg,
+                r.recorded_date AS date,
+                r.source,
+                m.name AS movement
+            FROM one_rm_history r
+            JOIN movements m ON m.id = r.movement_id
+            WHERE m.name = ?
+            ORDER BY r.recorded_date ASC, r.weight_kg DESC
+            """,
+            (movement_name,)
+        ).fetchall()
+
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def delete_1rm(movement_name: str) -> None:
+    """
+    Borra todos los registros de 1RM para un movimiento.
+    Útil para corregir errores de ingreso.
+    """
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            DELETE FROM one_rm_history
+            WHERE movement_id = (
+                SELECT id FROM movements WHERE name = ?
+            )
+            """,
+            (movement_name,)
+        )
+        conn.commit()
+        print(f"🗑️  1RM borrado para: {movement_name}")
+    finally:
+        conn.close()
+def get_all_movements() -> list[dict]:
+    """Retorna todos los movimientos del catálogo para usar en formularios."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT id, name, category FROM movements ORDER BY category, name"
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+# ─────────────────────────────────────────────────────────────
 # HISTORIAL DEL ENTRENADOR
 # ─────────────────────────────────────────────────────────────
 
@@ -525,9 +757,7 @@ def save_coach_message(role: str, content: str) -> None:
 
 
 def get_coach_history(last_n: int = 6) -> list[dict]:
-    """
-    Recupera los últimos N mensajes del historial en orden cronológico.
-    """
+    """Recupera los últimos N mensajes del historial en orden cronológico."""
     conn = get_connection()
     try:
         rows = conn.execute(

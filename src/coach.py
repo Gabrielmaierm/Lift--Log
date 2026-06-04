@@ -2,10 +2,9 @@
 coach.py — LiftLog: Motor del entrenador inteligente
 ====================================================
 Responsabilidades:
-  1. build_athlete_context(): extrae datos de SQLite y construye
-     el bloque de contexto que se inyecta en el system prompt
+  1. build_athlete_context(): extrae datos de SQLite incluyendo
+     el perfil del atleta y construye el contexto para Claude
   2. ask_coach(): llama a Claude API con ese contexto + historial
-     de conversación + la pregunta del atleta
 """
 
 import os
@@ -18,6 +17,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent))
 from db import (
+    get_athlete_profile,
     get_coach_history,
     get_current_1rms,
     get_recent_sessions,
@@ -53,7 +53,6 @@ Razonas sobre los datos REALES del atleta que se te proporcionan al final de est
 - < 78%: déficit técnico en snatch o exceso de fuerza relativa en clean & jerk
 - > 84%: posible debilidad en el jerk o déficit de fuerza de empuje
 - Si cualquiera de los dos 1RM es null: NO hagas afirmaciones sobre la relación.
-  Sugiere que el atleta registre el movimiento faltante.
 
 ### Fórmula 1RM
 - Brzycki (1-5 reps): 1RM = peso × 36 / (37 − reps)
@@ -71,13 +70,19 @@ Razonas sobre los datos REALES del atleta que se te proporcionan al final de est
 - Caída >35%: sobreentrenamiento, lesión oculta o fatiga severa
 - Aumento >25% en una semana: riesgo de carga excesiva
 
+### Categorías de peso IWF — contexto para prescripción de cargas
+Las cargas absolutas deben interpretarse siempre en relación a la
+categoría de peso del atleta. Un snatch de 90 kg es diferente para
+un atleta de 67 kg que para uno de 96 kg.
+
 ## COMPORTAMIENTO
 - Usa % 1RM al prescribir cargas y calcula el peso absoluto con los datos del atleta
   Formato: "3×2 al 82% = X kg"
 - Cita el fundamento (Prilepin, periodización, evidencia) cuando sea relevante
 - Tono directo y técnico, sin sobreexplicar conceptos básicos
 - Si detectas una tendencia preocupante, la mencionas aunque no te la hayan preguntado
-- Contexto de retorno de lesión: siempre prioriza progresión conservadora
+- Si el estado es "Retorno de lesión" o "Lesión activa": prioriza progresión conservadora
+- Si hay fecha de competencia: orienta las recomendaciones hacia ese objetivo
 - Para prescribir sesiones usa este formato:
   Ejercicio: X series × Y reps al Z% (= W kg)"""
 
@@ -90,14 +95,70 @@ def build_athlete_context() -> str:
     """
     Extrae datos del atleta desde SQLite y construye el bloque de contexto
     que se adjunta al system prompt en cada llamada a la API.
+
+    Incluye:
+    - Perfil completo del atleta (desde athlete_profile)
+    - 1RM actuales
+    - Relación snatch/C&J
+    - Tonelaje semanal últimas 4 semanas
+    - Alerta de volumen
+    - Resumen de las 3 últimas sesiones
     """
-    today = date.today().isoformat()
+    today   = date.today().isoformat()
+    profile = get_athlete_profile()
 
     current_1rms    = get_current_1rms()
     ratio           = get_snatch_cj_ratio()
     tonnage_data    = get_weekly_tonnage(weeks=6)
     volume_alert    = get_volume_trend_alert(lookback_weeks=4)
     recent_sessions = get_recent_sessions(limit=3)
+
+    # ── Formatear perfil del atleta ──────────────────────────
+    nombre    = profile.get("nombre")    or "Sin nombre"
+    edad      = profile.get("edad")
+    genero    = profile.get("genero")    or "—"
+    cat_peso  = profile.get("categoria_peso") or "Sin definir"
+    años_exp  = profile.get("años_experiencia") or 0
+    federacion = profile.get("federacion") or "—"
+    nivel     = profile.get("nivel_competitivo") or "—"
+    fecha_comp = profile.get("fecha_competencia")
+    estado    = profile.get("estado_entrenamiento") or "Normal"
+    notas_add = profile.get("notas_adicionales") or ""
+
+    edad_str  = f"{edad} años" if edad else "—"
+
+    # Calcular semanas hasta competencia si hay fecha
+    if fecha_comp:
+        try:
+            from datetime import datetime
+            delta = datetime.strptime(fecha_comp, "%Y-%m-%d") - datetime.today()
+            semanas_comp = max(0, delta.days // 7)
+            comp_str = f"{fecha_comp} ({semanas_comp} semanas)"
+        except Exception:
+            comp_str = fecha_comp
+    else:
+        comp_str = "Sin competencia programada"
+
+    # Estado con ícono
+    estado_icons = {
+        "Normal":            "✓",
+        "Retorno de lesión": "⚠️",
+        "Lesión activa":     "🚨",
+    }
+    estado_str = f"{estado_icons.get(estado, '—')} {estado}"
+
+    profile_block = f"""  Nombre:              {nombre}
+  Edad:                {edad_str}
+  Género:              {genero}
+  Categoría de peso:   {cat_peso} kg
+  Experiencia:         {años_exp} año(s) en halterofilia
+  Federación:          {federacion}
+  Nivel competitivo:   {nivel}
+  Próxima competencia: {comp_str}
+  Estado actual:       {estado_str}"""
+
+    if notas_add:
+        profile_block += f"\n  Notas del atleta:    {notas_add}"
 
     # ── Formatear 1RMs ───────────────────────────────────────
     if current_1rms:
@@ -188,12 +249,9 @@ def build_athlete_context() -> str:
     # ── Construir bloque final ───────────────────────────────
     context = f"""
 ════════════════════════════════════════════
-DATOS DEL ATLETA — Actualizado: {today}
+PERFIL DEL ATLETA — {today}
 ════════════════════════════════════════════
-
-⚠️  ESTADO: Retorno de lesión (<4 semanas). Entrenando con precaución.
-    Frecuencia actual: 5-6 sesiones/semana.
-    Sin modelo de periodización formal definido.
+{profile_block}
 
 ── 1RM ACTUALES ──────────────────────────────
 {ones_rm_block}
@@ -221,14 +279,6 @@ DATOS DEL ATLETA — Actualizado: {today}
 def ask_coach(user_question: str) -> str:
     """
     Envía una pregunta al entrenador IA con el contexto completo del atleta.
-
-    Flujo:
-    1. Construir contexto dinámico desde SQLite
-    2. Adjuntarlo al final del system prompt
-    3. Recuperar historial de conversación (últimos 6 mensajes)
-    4. Enviar a claude-sonnet-4-5
-    5. Guardar pregunta + respuesta en SQLite
-    6. Retornar la respuesta
     """
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
