@@ -29,6 +29,7 @@ from db import (
     get_current_1rms,
     get_recent_sessions,
     get_snatch_cj_ratio,
+    get_coach_history,
     get_volume_trend_alert,
     get_weekly_tonnage,
     initialize_db,
@@ -1036,7 +1037,10 @@ elif page == "Entrenador IA":
         st.warning("⚠️ Completa tu **Perfil** antes de usar el entrenador para obtener recomendaciones precisas.")
 
     if "chat_messages" not in st.session_state:
-        st.session_state.chat_messages = []
+        history = get_coach_history(last_n=20)
+        st.session_state.chat_messages = history if history else []
+    if "show_all_messages" not in st.session_state:
+        st.session_state.show_all_messages = False
 
     col_ctx, col_clr = st.columns([5, 1])
     with col_ctx:
@@ -1063,7 +1067,17 @@ elif page == "Entrenador IA":
 
     st.divider()
 
-    for msg in st.session_state.chat_messages:
+    # Mostrar solo los últimos 10 mensajes por defecto
+    all_msgs = st.session_state.chat_messages
+    if len(all_msgs) > 10 and not st.session_state.show_all_messages:
+        msgs_to_show = all_msgs[-10:]
+        if st.button(f"Ver {len(all_msgs) - 10} mensajes anteriores", use_container_width=False):
+            st.session_state.show_all_messages = True
+            st.rerun()
+    else:
+        msgs_to_show = all_msgs
+
+    for msg in msgs_to_show:
         with st.chat_message(msg["role"], avatar="🏋️" if msg["role"] == "assistant" else "👤"):
             st.markdown(msg["content"])
 
