@@ -597,6 +597,35 @@ if page == "Análisis":
         )
         st.plotly_chart(fig_bar, width="stretch")
 
+        # Separacion tonelaje clasicos vs accesorios
+        st.divider()
+        section_label("Tonelaje: Clasicos vs Accesorios")
+
+        df_clas = df[df["category"].isin(["classic","variant"])].groupby("week")["tonnage_kg"].sum().reset_index()
+        df_acc  = df[df["category"] == "accessory"].groupby("week")["tonnage_kg"].sum().reset_index()
+        df_clas["tipo"] = "Clasicos + Variantes"
+        df_acc["tipo"]  = "Accesorios"
+        df_split = pd.concat([df_clas, df_acc]).sort_values("week")
+
+        if not df_split.empty:
+            fig_split = px.line(
+                df_split, x="week", y="tonnage_kg", color="tipo",
+                markers=True,
+                labels={"week": "Semana", "tonnage_kg": "Tonelaje (kg)", "tipo": ""},
+                color_discrete_map={"Clasicos + Variantes": "#C9A84C", "Accesorios": "#60A5FA"},
+            )
+            fig_split.update_layout(
+                height=300,
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                font_color="#F9FAFB",
+                legend_title="",
+                xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", color="#6B7280"),
+                yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", color="#6B7280"),
+            )
+            st.plotly_chart(fig_split, width="stretch")
+            st.caption("Las tablas de Prilepin aplican solo a Clasicos + Variantes.")
+
     else:
         st.markdown("""
         <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;
