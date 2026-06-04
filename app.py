@@ -22,6 +22,7 @@ from db import (
     TRAINING_STATES,
     WEIGHT_CATEGORIES,
     delete_1rm,
+    delete_session,
     get_1rm_history_by_movement,
     get_all_movements,
     get_athlete_profile,
@@ -762,9 +763,16 @@ elif page == "Sesiones":
                         ct, cm = st.columns([3, 1])
                         with ct: st.dataframe(df_d, use_container_width=True, hide_index=True)
                         with cm:
-                            st.metric("Tonelaje", f"{tonnage:.0f} kg")
-                            st.metric("Sets", n_sets)
-
+                                st.metric("Tonelaje", f"{tonnage:.0f} kg")
+                                st.metric("Sets", n_sets)
+                                st.markdown("<br>", unsafe_allow_html=True)
+                                if st.button(
+                                    "🗑️ Borrar",
+                                    key=f"del_sess_{sess['id']}",
+                                    use_container_width=True,
+                                ):
+                                    delete_session(sess["id"])
+                                    st.rerun()
 
 # ─────────────────────────────────────────────────────────────
 # PÁGINA: PERFIL

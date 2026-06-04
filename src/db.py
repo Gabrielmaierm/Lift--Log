@@ -727,6 +727,18 @@ def delete_1rm(movement_name: str) -> None:
         print(f"🗑️  1RM borrado para: {movement_name}")
     finally:
         conn.close()
+def delete_session(session_id: int) -> None:
+    """
+    Borra una sesión y todos sus sets (CASCADE).
+    También recalcula los 1RMs después del borrado.
+    """
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        conn.commit()
+        print(f"🗑️  Sesión {session_id} eliminada")
+    finally:
+        conn.close()
 def get_all_movements() -> list[dict]:
     """Retorna todos los movimientos del catálogo para usar en formularios."""
     conn = get_connection()

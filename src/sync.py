@@ -154,6 +154,13 @@ def parse_and_import_session(filepath: Path) -> bool:
 
     print(f"   ✅ {imported}/{len(data['sets'])} sets importados "
           f"| ID={session_id} | {data['session_date']}")
+
+    # Mover archivo a processed/ para evitar reimportación
+    processed_dir = filepath.parent / "processed"
+    processed_dir.mkdir(exist_ok=True)
+    filepath.rename(processed_dir / filepath.name)
+    print(f"   📁 Archivo movido a processed/")
+
     return True
 
 
