@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="LiftLog" />
+  <link rel="manifest" href="manifest.json" />
+  <title>LiftLog</title>
+
+  <style>
+    /* ── Reset ────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gold:     #C9A84C;
+      --gold-dim: #8B6914;
+      --bg:       #0a0a0f;
+      --surface:  #111827;
+      --surface2: #1f2937;
+      --border:   #1f2937;
+      --text:     #F9FAFB;
+      --dim:      #9CA3AF;
+      --red:      #EF4444;
+      --green:    #10B981;
+      --radius:   12px;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bot: env(safe-area-inset-bottom, 16px);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ───────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      padding-top: calc(12px + var(--safe-top));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .logo {
+      display: flex;
+      align-items: baseline;
+      gap: 1px;
+    }
+    .logo-l {
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--gold);
+      letter-spacing: -1px;
+    }
+    .logo-rest {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -0.5px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .date-badge {
+      font-size: 12px;
+      color: var(--dim);
+      font-weight: 500;
+    }
+
+    .btn-finish-header {
+      background: var(--green);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 7px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-finish-header:disabled {
+      background: var(--surface2);
+      color: var(--dim);
+    }
+
+    /* ── Área scrollable de sets ──────────────────────────── */
+    #sets-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .sets-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .sets-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--dim);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+    }
+    .sets-tonnage {
+      font-size: 12px;
+      color: var(--gold);
+      font-weight: 600;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--dim);
+    }
+    .empty-state .emoji { font-size: 36px; margin-bottom: 12px; }
+    .empty-state p { font-size: 14px; line-height: 1.5; }
+
+    /* ── Set row ──────────────────────────────────────────── */
+    .set-row {
+      display: flex;
+      align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--gold);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      gap: 8px;
+    }
+    .set-num {
+      font-size: 11px;
+      color: var(--dim);
+      min-width: 20px;
+      font-weight: 600;
+    }
+    .set-info { flex: 1; }
+    .set-movement {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .set-detail {
+      font-size: 12px;
+      color: var(--dim);
+      margin-top: 2px;
+    }
+    .set-pct {
+      font-size: 11px;
+      color: var(--gold);
+      font-weight: 700;
+      min-width: 36px;
+      text-align: right;
+    }
+    .set-delete {
+      background: none;
+      border: none;
+      color: var(--dim);
+      font-size: 16px;
+      padding: 4px 6px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      border-radius: 6px;
+    }
+    .set-delete:active { background: var(--surface2); }
+
+    /* ── Panel de input (fijo abajo) ──────────────────────── */
+    #input-panel {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 14px 16px;
+      padding-bottom: calc(14px + var(--safe-bot));
+      flex-shrink: 0;
+    }
+
+    /* Selector de ejercicio */
+    .select-wrapper {
+      position: relative;
+      margin-bottom: 12px;
+    }
+    select {
+      width: 100%;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 13px 40px 13px 14px;
+      font-size: 16px;
+      font-family: inherit;
+      font-weight: 600;
+      -webkit-appearance: none;
+      appearance: none;
+      cursor: pointer;
+    }
+    select:focus {
+      outline: none;
+      border-color: var(--gold);
+    }
+    .select-arrow {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--dim);
+      pointer-events: none;
+      font-size: 12px;
+    }
+
+    /* Fila de peso */
+    .weight-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .weight-display {
+      flex: 1;
+      text-align: center;
+    }
+    .weight-value {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+    .weight-unit {
+      font-size: 14px;
+      color: var(--dim);
+      font-weight: 400;
+    }
+
+    .btn-w {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      height: 44px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-w:active { background: var(--border); }
+    .btn-w-sm { width: 48px; }
+    .btn-w-lg { width: 58px; }
+
+    /* Fila de reps */
+    .reps-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .reps-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+    .btn-rep {
+      flex: 1;
+      height: 50px;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      font-size: 20px;
+      font-weight: 800;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      transition: all 0.1s;
+    }
+    .btn-rep.active {
+      background: var(--gold);
+      border-color: var(--gold);
+      color: #000;
+    }
+    .btn-rep:active { transform: scale(0.96); }
+
+    /* Fila de series y RPE */
+    .series-rpe-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .input-group {
+      flex: 1;
+    }
+    .input-group label {
+      display: block;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 5px;
+    }
+    .input-group input {
+      width: 100%;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 18px;
+      font-weight: 700;
+      font-family: inherit;
+      text-align: center;
+    }
+    .input-group input:focus {
+      outline: none;
+      border-color: var(--gold);
+    }
+
+    /* Botón agregar */
+    .btn-add {
+      width: 100%;
+      height: 52px;
+      background: var(--gold);
+      color: #000;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      letter-spacing: 0.3px;
+      -webkit-tap-highlight-color: transparent;
+      margin-bottom: 8px;
+    }
+    .btn-add:active { background: var(--gold-dim); }
+
+    /* ── Toast ────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: calc(80px + var(--safe-bot));
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: rgba(17,24,39,0.95);
+      color: var(--text);
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 100;
+      white-space: nowrap;
+      border: 1px solid var(--border);
+      backdrop-filter: blur(10px);
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ── Modal de notas ───────────────────────────────────── */
+    #notes-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      align-items: flex-end;
+    }
+    #notes-modal.show { display: flex; }
+    .modal-content {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-radius: 20px 20px 0 0;
+      padding: 20px 16px;
+      padding-bottom: calc(20px + var(--safe-bot));
+      width: 100%;
+    }
+    .modal-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-close {
+      background: var(--surface2);
+      border: none;
+      color: var(--dim);
+      border-radius: 50%;
+      width: 28px;
+      height: 28px;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #session-notes-input {
+      width: 100%;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 15px;
+      font-family: inherit;
+      resize: none;
+      height: 80px;
+      margin-bottom: 12px;
+    }
+    #session-notes-input:focus {
+      outline: none;
+      border-color: var(--gold);
+    }
+    .btn-save-notes {
+      width: 100%;
+      height: 48px;
+      background: var(--gold);
+      color: #000;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- ── HEADER ─────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <span class="logo-l">L</span>
+    <span class="logo-rest">iftLog</span>
+  </div>
+  <div class="header-right">
+    <span class="date-badge" id="header-date"></span>
+    <button class="btn-finish-header" id="btn-finish" onclick="showNotesModal()" disabled>
+      Finalizar
+    </button>
+  </div>
+</header>
+
+<!-- ── LISTA DE SETS ───────────────────────────────────────── -->
+<div id="sets-area">
+  <div class="sets-header">
+    <span class="sets-label"><span id="set-count">0</span> sets</span>
+    <span class="sets-tonnage" id="tonnage-display"></span>
+  </div>
+  <div id="sets-list">
+    <div class="empty-state">
+      <div class="emoji">🏋️</div>
+      <p>Selecciona un ejercicio<br>y agrega el primer set</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── PANEL DE INPUT ──────────────────────────────────────── -->
+<div id="input-panel">
+
+  <!-- Selector de ejercicio -->
+  <div class="select-wrapper">
+    <select id="movement-select">
+      <optgroup label="— Clásicos">
+        <option value="Snatch">Snatch</option>
+        <option value="Clean &amp; Jerk">Clean &amp; Jerk</option>
+      </optgroup>
+      <optgroup label="— Variantes">
+        <option value="Hang Snatch">Hang Snatch</option>
+        <option value="Power Snatch">Power Snatch</option>
+        <option value="Hang Power Snatch">Hang Power Snatch</option>
+        <option value="Mid-Hang Clean">Mid-Hang Clean</option>
+        <option value="Squat Clean">Squat Clean</option>
+        <option value="Power Clean">Power Clean</option>
+        <option value="Split Jerk">Split Jerk</option>
+        <option value="Push Jerk">Push Jerk</option>
+        <option value="Clean">Clean</option>
+      </optgroup>
+      <optgroup label="— Accesorios">
+        <option value="Front Squat">Front Squat</option>
+        <option value="Back Squat">Back Squat</option>
+        <option value="Romanian Deadlift">Romanian Deadlift</option>
+        <option value="Snatch Pull">Snatch Pull</option>
+        <option value="Clean Pull">Clean Pull</option>
+        <option value="Overhead Squat">Overhead Squat</option>
+        <option value="Snatch Balance">Snatch Balance</option>
+        <option value="Jerk from Rack">Jerk from Rack</option>
+      </optgroup>
+    </select>
+    <span class="select-arrow">▼</span>
+  </div>
+
+  <!-- Control de peso -->
+  <div class="weight-row">
+    <button class="btn-w btn-w-lg" onclick="adjustWeight(-5)">−5</button>
+    <button class="btn-w btn-w-sm" onclick="adjustWeight(-2.5)">−2.5</button>
+    <button class="btn-w btn-w-sm" onclick="adjustWeight(-1)">−1</button>
+
+    <div class="weight-display">
+      <div class="weight-value" id="weight-display">80.0</div>
+      <div class="weight-unit">kg</div>
+    </div>
+
+    <button class="btn-w btn-w-sm" onclick="adjustWeight(1)">+1</button>
+    <button class="btn-w btn-w-sm" onclick="adjustWeight(2.5)">+2.5</button>
+    <button class="btn-w btn-w-lg" onclick="adjustWeight(5)">+5</button>
+  </div>
+
+  <!-- Reps -->
+  <div class="reps-label">Repeticiones</div>
+  <div class="reps-row" id="reps-row">
+    <button class="btn-rep active" onclick="selectReps(1)">1</button>
+    <button class="btn-rep" onclick="selectReps(2)">2</button>
+    <button class="btn-rep" onclick="selectReps(3)">3</button>
+    <button class="btn-rep" onclick="selectReps(4)">4</button>
+    <button class="btn-rep" onclick="selectReps(5)">5</button>
+    <button class="btn-rep" onclick="selectReps(6)">6</button>
+  </div>
+
+  <!-- Series y RPE -->
+  <div class="series-rpe-row">
+    <div class="input-group">
+      <label>Series</label>
+      <input type="number" id="series-input" value="1" min="1" max="10" />
+    </div>
+    <div class="input-group">
+      <label>RPE</label>
+      <input type="number" id="rpe-input" value="8" min="6" max="10" step="0.5" />
+    </div>
+  </div>
+
+  <!-- Botón agregar -->
+  <button class="btn-add" onclick="addSet()">＋ AGREGAR SET</button>
+
+</div>
+
+<!-- ── MODAL NOTAS + FINALIZAR ─────────────────────────────── -->
+<div id="notes-modal">
+  <div class="modal-content">
+    <div class="modal-title">
+      <span>Finalizar sesión</span>
+      <button class="modal-close" onclick="hideNotesModal()">✕</button>
+    </div>
+    <textarea id="session-notes-input"
+              placeholder="Notas opcionales: sensaciones, técnica, observaciones..."></textarea>
+    <button class="btn-save-notes" onclick="finishSession()">
+      ✓ Exportar y finalizar
+    </button>
+  </div>
+</div>
+
+<!-- ── TOAST ───────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<!-- ── JAVASCRIPT ─────────────────────────────────────────── -->
+<script>
+"use strict";
+
+// ─────────────────────────────────────────────────────────────
+// ESTADO
+// ─────────────────────────────────────────────────────────────
+
+let currentWeight = 80.0;
+let currentReps   = 1;
+let sessionSets   = [];
+let sessionDate   = new Date().toISOString().split("T")[0];
+
+// ─────────────────────────────────────────────────────────────
+// INDEXEDDB
+// ─────────────────────────────────────────────────────────────
+
+const DB_NAME    = "liftlog";
+const DB_VERSION = 1;
+const STORE      = "sessions";
+let db           = null;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const _db = e.target.result;
+      if (!_db.objectStoreNames.contains(STORE)) {
+        const store = _db.createObjectStore(STORE, { keyPath: "session_uuid" });
+        store.createIndex("session_date", "session_date", { unique: false });
+      }
+    };
+    req.onsuccess  = (e) => { db = e.target.result; resolve(db); };
+    req.onerror    = (e) => reject(e.target.error);
+  });
+}
+
+function saveToIDB(data) {
+  if (!db) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const tx    = db.transaction(STORE, "readwrite");
+    const store = tx.objectStore(STORE);
+    const req   = store.put(data);
+    req.onsuccess = () => resolve();
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// UI — CONTROLES
+// ─────────────────────────────────────────────────────────────
+
+function adjustWeight(delta) {
+  currentWeight = Math.max(0.5, Math.round((currentWeight + delta) * 10) / 10);
+  document.getElementById("weight-display").textContent = currentWeight.toFixed(1);
+}
+
+function selectReps(n) {
+  currentReps = n;
+  document.querySelectorAll(".btn-rep").forEach((btn, i) => {
+    btn.classList.toggle("active", i + 1 === n);
+  });
+}
+
+function showToast(msg, duration = 2000) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), duration);
+}
+
+function showNotesModal() {
+  document.getElementById("notes-modal").classList.add("show");
+}
+
+function hideNotesModal() {
+  document.getElementById("notes-modal").classList.remove("show");
+}
+
+// ─────────────────────────────────────────────────────────────
+// LÓGICA DE SETS
+// ─────────────────────────────────────────────────────────────
+
+function addSet() {
+  const movement = document.getElementById("movement-select").value;
+  const series   = parseInt(document.getElementById("series-input").value) || 1;
+  const rpe      = parseFloat(document.getElementById("rpe-input").value) || 8;
+
+  for (let i = 0; i < series; i++) {
+    sessionSets.push({
+      movement:  movement,
+      weight_kg: currentWeight,
+      reps:      currentReps,
+      rpe:       rpe,
+      set_order: sessionSets.length + 1,
+      notes:     "",
+    });
+  }
+
+  renderSets();
+  updateFinishBtn();
+
+  const label = series > 1
+    ? `✓ ${series}×${currentReps} ${movement} @ ${currentWeight} kg`
+    : `✓ ${currentReps}×${currentWeight} kg — ${movement}`;
+  showToast(label);
+}
+
+function deleteSet(index) {
+  sessionSets.splice(index, 1);
+  sessionSets.forEach((s, i) => { s.set_order = i + 1; });
+  renderSets();
+  updateFinishBtn();
+}
+
+function renderSets() {
+  const list    = document.getElementById("sets-list");
+  const countEl = document.getElementById("set-count");
+  const tonnEl  = document.getElementById("tonnage-display");
+
+  countEl.textContent = sessionSets.length;
+
+  if (sessionSets.length === 0) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <div class="emoji">🏋️</div>
+        <p>Selecciona un ejercicio<br>y agrega el primer set</p>
+      </div>`;
+    tonnEl.textContent = "";
+    return;
+  }
+
+  // Calcular tonelaje
+  const tonnage = sessionSets.reduce((sum, s) => sum + s.weight_kg * s.reps, 0);
+  tonnEl.textContent = `${tonnage.toFixed(0)} kg`;
+
+  list.innerHTML = sessionSets.map((s, i) => `
+    <div class="set-row">
+      <span class="set-num">${s.set_order}</span>
+      <div class="set-info">
+        <div class="set-movement">${s.movement}</div>
+        <div class="set-detail">
+          ${s.reps} rep${s.reps > 1 ? "s" : ""} · ${s.weight_kg.toFixed(1)} kg
+          · RPE ${s.rpe}
+        </div>
+      </div>
+      <span class="set-pct" id="pct-${i}">—</span>
+      <button class="set-delete" onclick="deleteSet(${i})">✕</button>
+    </div>
+  `).join("");
+
+  // Scroll al último set
+  const lastRow = list.lastElementChild;
+  if (lastRow) lastRow.scrollIntoView({ behavior: "smooth", block: "end" });
+}
+
+function updateFinishBtn() {
+  document.getElementById("btn-finish").disabled = sessionSets.length === 0;
+}
+
+// ─────────────────────────────────────────────────────────────
+// EXPORTAR SESIÓN
+// ─────────────────────────────────────────────────────────────
+
+async function finishSession() {
+  hideNotesModal();
+
+  const notes = document.getElementById("session-notes-input").value.trim();
+
+  const sessionData = {
+    session_uuid: crypto.randomUUID(),
+    session_date: sessionDate,
+    notes:        notes,
+    exported_at:  new Date().toISOString(),
+    sets:         sessionSets,
+  };
+
+  // Guardar en IndexedDB como respaldo
+  try { await saveToIDB(sessionData); } catch (e) { console.warn("IDB:", e); }
+
+  const filename = `liftlog_session_${sessionDate}_${sessionData.session_uuid.slice(0, 8)}.json`;
+  const json     = JSON.stringify(sessionData, null, 2);
+  const blob     = new Blob([json], { type: "application/json" });
+
+  // Web Share API (iOS Safari → Files → iCloud Drive)
+  if (navigator.share && navigator.canShare) {
+    const file = new File([blob], filename, { type: "application/json" });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: "LiftLog — Sesión exportada",
+        });
+        resetSession();
+        showToast("✅ Sesión exportada", 3000);
+        return;
+      } catch (err) {
+        if (err.name === "AbortError") return; // Usuario canceló
+        console.warn("Share:", err);
+      }
+    }
+  }
+
+  // Fallback: descarga directa
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement("a");
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  resetSession();
+  showToast("✅ Descargado — mueve a iCloud/LiftLog", 4000);
+}
+
+function resetSession() {
+  sessionSets  = [];
+  sessionDate  = new Date().toISOString().split("T")[0];
+  document.getElementById("session-notes-input").value = "";
+  renderSets();
+  updateFinishBtn();
+}
+
+// ─────────────────────────────────────────────────────────────
+// INICIALIZACIÓN
+// ─────────────────────────────────────────────────────────────
+
+async function init() {
+  // Fecha en header
+  const opts = { weekday: "short", day: "numeric", month: "short" };
+  document.getElementById("header-date").textContent =
+    new Date().toLocaleDateString("es-CL", opts);
+
+  // IndexedDB
+  try { await openDB(); } catch (e) { console.warn("IDB no disponible:", e); }
+
+  // Estado inicial
+  selectReps(1);
+  updateFinishBtn();
+}
+
+// Service Worker
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("./sw.js")
+      .catch((e) => console.warn("SW:", e));
+  });
+}
+
+window.addEventListener("DOMContentLoaded", init);
+</script>
+
+</body>
+</html>
