@@ -510,7 +510,7 @@ if page == "Análisis":
                 paper_bgcolor="rgba(0,0,0,0)",
                 font_color="#F9FAFB",
             )
-            st.plotly_chart(fig_gauge, use_container_width=True)
+            st.plotly_chart(fig_gauge, width="stretch")
 
             msgs = {
                 "ok":   ("✅ Rango normal (78–84%)", "success"),
@@ -568,7 +568,7 @@ if page == "Análisis":
                 xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", color="#6B7280"),
                 yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", color="#6B7280"),
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
         # Barras total semanal
         df_t = (
@@ -595,7 +595,7 @@ if page == "Análisis":
             xaxis=dict(showgrid=False, color="#6B7280"),
             yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", color="#6B7280"),
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar, width="stretch")
 
     else:
         st.markdown("""
@@ -654,7 +654,7 @@ elif page == "Sesiones":
             rpe = st.number_input("RPE", min_value=6.0, max_value=10.0, value=8.0, step=0.5, key="set_rpe")
         with col_btn:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("＋ Agregar", use_container_width=True, type="primary"):
+            if st.button("＋ Agregar", width="stretch", type="primary"):
                 for _ in range(int(series)):
                     st.session_state.new_session_sets.append({
                         "movement":  selected_mv,
@@ -696,7 +696,7 @@ elif page == "Sesiones":
 
             cg, cl = st.columns(2)
             with cg:
-                if st.button("💾 Guardar sesión", use_container_width=True, type="primary"):
+                if st.button("💾 Guardar sesión", width="stretch", type="primary"):
                     sid = insert_session(
                         session_uuid=str(uuid.uuid4()),
                         session_date=session_date.strftime("%Y-%m-%d"),
@@ -718,7 +718,7 @@ elif page == "Sesiones":
                         st.success(f"✅ Sesión guardada — {n} sets · {tonnage_s:.0f} kg")
                         st.rerun()
             with cl:
-                if st.button("🗑️ Limpiar", use_container_width=True):
+                if st.button("🗑️ Limpiar", width="stretch"):
                     st.session_state.new_session_sets = []
                     st.rerun()
         else:
@@ -762,7 +762,7 @@ elif page == "Sesiones":
                         df_d["% 1RM"] = df_d.apply(calc_pct, axis=1)
 
                         ct, cm = st.columns([3, 1])
-                        with ct: st.dataframe(df_d, use_container_width=True, hide_index=True)
+                        with ct: st.dataframe(df_d, width="stretch", hide_index=True)
                         with cm:
                                 st.metric("Tonelaje", f"{tonnage:.0f} kg")
                                 st.metric("Sets", n_sets)
@@ -770,7 +770,7 @@ elif page == "Sesiones":
                                 if st.button(
                                     "🗑️ Borrar",
                                     key=f"del_sess_{sess['id']}",
-                                    use_container_width=True,
+                                    width="stretch",
                                 ):
                                     delete_session(sess["id"])
                                     st.rerun()
@@ -847,7 +847,7 @@ elif page == "Perfil":
             height=80,
         )
 
-        if st.form_submit_button("💾 Guardar perfil", use_container_width=True, type="primary"):
+        if st.form_submit_button("💾 Guardar perfil", width="stretch", type="primary"):
             save_athlete_profile(
                 nombre               = nombre,
                 edad                 = int(edad),
@@ -925,7 +925,7 @@ elif page == "Herramientas":
                         "Tonelaje óptimo": f"{opt_s * r * w_abs:.0f} kg",
                     })
             if sugs:
-                st.dataframe(pd.DataFrame(sugs), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(sugs), width="stretch", hide_index=True)
         else:
             st.info(f"No hay 1RM registrado para **{p_mv}**. Regístralo en la pestaña **Registro 1RM**.")
 
@@ -947,7 +947,7 @@ elif page == "Herramientas":
         st.dataframe(pd.DataFrame({
             "% 1RM":     [f"{p}%" for p in [100, 95, 90, 85, 80, 75, 70]],
             "Peso (kg)": [round(est * p / 100, 1) for p in [100, 95, 90, 85, 80, 75, 70]],
-        }), use_container_width=True, hide_index=True)
+        }), width="stretch", hide_index=True)
 
     with tab_1rm:
         st.subheader("Registro Manual de 1RM")
@@ -963,7 +963,7 @@ elif page == "Herramientas":
             with m3:
                 f_1rm = st.date_input("Fecha", value=date.today(), format="YYYY-MM-DD")
 
-            if st.form_submit_button("💾 Guardar 1RM", use_container_width=True, type="primary"):
+            if st.form_submit_button("💾 Guardar 1RM", width="stretch", type="primary"):
                 save_manual_1rm(mv_1rm, float(w_1rm), f_1rm.strftime("%Y-%m-%d"))
                 st.success(f"✅ 1RM guardado: {mv_1rm} → {w_1rm} kg ({f_1rm})")
                 st.rerun()
@@ -979,7 +979,7 @@ elif page == "Herramientas":
                 "Movimiento": mv, "1RM (kg)": d["weight_kg"],
                 "Fecha": d["date"],
                 "Fuente": "✅ Real" if d["source"] == "actual" else "📐 Estimado",
-            } for mv, d in c1rms.items()]), use_container_width=True, hide_index=True)
+            } for mv, d in c1rms.items()]), width="stretch", hide_index=True)
 
         st.divider()
         st.subheader("Progresión Histórica de 1RM")
@@ -1007,7 +1007,7 @@ elif page == "Herramientas":
                     xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", color="#6B7280"),
                     yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", color="#6B7280"),
                 )
-                st.plotly_chart(fig_h, use_container_width=True)
+                st.plotly_chart(fig_h, width="stretch")
             elif len(hist) == 1:
                 st.info("Solo hay un registro. Se necesitan al menos 2 puntos para mostrar la curva.")
 
@@ -1020,7 +1020,7 @@ elif page == "Herramientas":
                 mv_del = st.selectbox("Movimiento", options=mv_all, key="del_1rm_mv")
             with cb:
                 st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("🗑️ Borrar", key="btn_del_1rm", use_container_width=True):
+                if st.button("🗑️ Borrar", key="btn_del_1rm", width="stretch"):
                     delete_1rm(mv_del)
                     st.warning(f"1RM de {mv_del} eliminado.")
                     st.rerun()
@@ -1050,7 +1050,7 @@ elif page == "Entrenador IA":
             except Exception as e:
                 st.error(f"Error: {e}")
     with col_clr:
-        if st.button("🗑️ Limpiar", use_container_width=True):
+        if st.button("🗑️ Limpiar", width="stretch"):
             st.session_state.chat_messages = []
             st.rerun()
 
@@ -1062,7 +1062,7 @@ elif page == "Entrenador IA":
         "¿Qué modelo de periodización me sugerirías?",
     ])):
         with col:
-            if st.button(q, key=f"sq_{i}", use_container_width=True):
+            if st.button(q, key=f"sq_{i}", width="stretch"):
                 st.session_state["_pending_q"] = q
 
     st.divider()
