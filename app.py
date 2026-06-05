@@ -425,6 +425,28 @@ with st.sidebar:
     )
 
     # Alerta perfil incompleto
+    # Indicador de estado del watcher
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "sync.py"],
+            capture_output=True, text=True
+        )
+        watcher_active = result.returncode == 0
+    except Exception:
+        watcher_active = False
+
+    if watcher_active:
+        st.markdown('''<div style="background:#064E3B;border:1px solid #065F46;
+            border-radius:8px;padding:8px 12px;margin-bottom:8px;">
+          <div style="font-size:11px;color:#6EE7B7;font-weight:600;">● Sync activo</div>
+        </div>''', unsafe_allow_html=True)
+    else:
+        st.markdown('''<div style="background:#1c1400;border:1px solid rgba(239,68,68,0.3);
+            border-radius:8px;padding:8px 12px;margin-bottom:8px;">
+            <div style="font-size:11px;color:#FCA5A5;font-weight:600;">● Sync inactivo</div>
+        </div>''', unsafe_allow_html=True)
+
     if not profile_is_complete():
         st.markdown("""
         <div style="background:#1c1400;border:1px solid rgba(201,168,76,0.3);
